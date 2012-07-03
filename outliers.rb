@@ -10,31 +10,29 @@ module MCollective
         @data_set = []
         @quartiles = {:high => nil,
                       :low=> nil}
-        @outliers = {:top => [], :bottom => []}
       end
 
       def process_result(value, reply)
-        @data_set << value
+        @data_set << {:sender => reply[:senderid], :value => value}
       end
 
       def summarize
-        @data_set.sort!
+        @data_set.sort!{|a,b| a[:value] <=> b[:value]}
         set_quartiles
         find_outliers
         super
       end
 
-      # Determine quartiles of dataset
       def set_quartiles
         n = @data_set.size
         l = Float((1.0/4.0)*(n + 1))
         u = Float((3.0/4.0)*(n + 1))
 
         l_rem = (l - Integer(l)).abs
-        q1 = (((1-l_rem) * (@data_set[l.truncate - 1])) + (l_rem * @data_set[l.truncate]))
+        q1 = (((1-l_rem) * (@data_set[l.truncate - 1][:value])) + (l_rem * @data_set[l.truncate][:value]))
 
         u_rem = (u - Integer(u)).abs
-        q3 = (((1-u_rem) * (@data_set[u.truncate] - 1)) + (u_rem * @data_set[u.truncate]))
+        q3 = (((1-u_rem) * (@data_set[u.truncate][:value] - 1)) + (u_rem * @data_set[u.truncate][:value]))
 
         iqr = (q3 - q1).abs
 
@@ -44,17 +42,22 @@ module MCollective
       end
 
       def find_outliers
+        high = []
+        low = []
+
         @data_set.each do |data_item|
-          @outliers[:top] << data_item if (data_item > @quartiles[:high])
-          @outliers[:bottom] << data_item if (data_item < @quartiles[:low])
+          high << data_item if data_item[:value] > @quartiles[:high]
+          low << data_item if data_item[:value] < @quartiles[:low]
         end
 
-        0..(@arguments.first).times do |index|
-          [:top, :bottom].each do |pos|
-            @outliers[pos].sort!{|a,b| b <=> a}
-            result[:value]["#{pos.to_s.capitalize} Outlier : #{index + 1} of #{@arguments}"] = @outliers[pos][index] if @outliers[pos][index]
-          end
-        end
+        create_summary(high, 'High')
+        create_summary(low, 'Low')
+      end
+
+      def create_summary(position, name)
+        position.sort!{|a,b| b[:value] <=> a[:value]}
+        position = position.slice(0, @arguments.first) unless position.size <= @arguments.first
+        result[:value]["Outliers(#{name})"] = position.map{|resp| "#{resp[:sender]} = #{resp[:value]}"}.join(", ") unless position.empty?
       end
     end
   end
