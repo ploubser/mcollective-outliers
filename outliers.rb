@@ -13,13 +13,16 @@ module MCollective
       end
 
       def process_result(value, reply)
-        @data_set << {:sender => reply[:senderid], :value => value}
+        @data_set << {:sender => reply[:sender], :value => value}
       end
 
       def summarize
         @data_set.sort!{|a,b| a[:value] <=> b[:value]}
         set_quartiles
         find_outliers
+        if result[:value].empty?
+          result[:value]["Outliers"] = "There are no outliers in this dataset"
+        end
         super
       end
 
